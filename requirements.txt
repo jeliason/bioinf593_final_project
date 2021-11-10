@@ -32,7 +32,7 @@ dataclasses @ file:///home/conda/feedstock_root/build_artifacts/dataclasses_1628
 debugpy @ file:///home/conda/feedstock_root/build_artifacts/debugpy_1635844663286/work
 decorator==4.4.2
 defusedxml @ file:///home/conda/feedstock_root/build_artifacts/defusedxml_1615232257335/work
-dgl==0.6.1
+dgl==0.4.3.post2
 distributed==2021.10.0
 docker @ file:///home/conda/feedstock_root/build_artifacts/docker-py_1633667477723/work
 docker-pycreds==0.4.0
@@ -47,7 +47,7 @@ greenlet @ file:///home/conda/feedstock_root/build_artifacts/greenlet_1635836788
 gunicorn @ file:///home/conda/feedstock_root/build_artifacts/gunicorn_1635854001116/work
 h5py @ file:///home/conda/feedstock_root/build_artifacts/h5py_1618606425381/work
 HeapDict==1.0.1
-histocartography==0.2.0
+-e git+ssh://git@github.com/jeliason/histocartography.git@4cc91626710b17706a5471edee10a9e1c8688606#egg=histocartography
 idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1609836280497/work
 imageio==2.10.1
 importlib-metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1635818245518/work
@@ -152,12 +152,13 @@ tables==3.6.1
 tabulate @ file:///home/conda/feedstock_root/build_artifacts/tabulate_1614001031686/work
 tblib==1.7.0
 tenacity @ file:///home/conda/feedstock_root/build_artifacts/tenacity_1626090218611/work
+tensorboardX==2.4
 terminado @ file:///home/conda/feedstock_root/build_artifacts/terminado_1631128156863/work
 testpath @ file:///home/conda/feedstock_root/build_artifacts/testpath_1621261527237/work
 threadpoolctl @ file:///home/conda/feedstock_root/build_artifacts/threadpoolctl_1633102299089/work
 tifffile==2021.11.2
 toolz==0.11.1
-torch==1.4.0
+torch==1.10.0
 torchvision==0.5.0
 tornado @ file:///home/conda/feedstock_root/build_artifacts/tornado_1635819587639/work
 tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1632160078689/work
