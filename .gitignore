@@ -2,3 +2,6 @@
 *.pkl
 *.xlsx
 *.png
+*.gml
+*.cpt
+.ipynb_checkpoints/*
