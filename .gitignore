@@ -5,3 +5,4 @@
 *.gml
 *.cpt
 .ipynb_checkpoints/*
+.Rproj.user

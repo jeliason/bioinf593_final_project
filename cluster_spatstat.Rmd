@@ -1,0 +1,83 @@
+---
+title: "Spatial statistics modeling"
+author: "Joel Eliason"
+date: "11/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(spatstat)
+library(tidyverse)
+library(lme4)
+library(nlme)
+library(mgcv)
+library(gamm4)
+```
+
+
+```{r}
+df = read_csv("data/CRC_master.csv")
+colnames(df)
+df = df %>%
+  mutate(across(c(groups,spots,patients,ClusterName),factor)) %>%
+  select(-`...1`) %>%
+  rename_all(~str_replace_all(., " - ", "_")) %>%
+  rename_all(~str_replace_all(., " ", "_"))
+
+# m <- lme(CD44_stroma ~ ClusterName,random = ~1|spots, correlation = corExp(form = ~X + Y|spots), data = df)
+# 
+# m2 <- gls(CD44_stroma ~ ClusterName, data = df, verbose = T)
+# vario2 <- Variogram(m2, form = ~X + Y, resType = "pearson")
+```
+
+```{r}
+set.seed(12358)
+N = 3e6                                  # total sample size
+n_groups = 1000                          # number of groups
+g = rep(1:n_groups, e = N/n_groups)      # the group identifier
+
+x = rnorm(N)                             # an observation level continuous variable
+b = rbinom(n_groups, size = 1, prob=.5)  # a cluster level categorical variable
+b = b[g]
+
+sd_g = .5     # standard deviation for the random effect
+sigma = 1     # standard deviation for the observation
+
+re0 = rnorm(n_groups, sd = sd_g)  # random effects
+re  = re0[g]
+
+lp = 0 + .5*x + .25*b + re        # linear predictor 
+
+y = rnorm(N, mean = lp, sd = sigma)               # create a continuous target variable
+y_bin = rbinom(N, size = 1, prob = plogis(lp))    # create a binary target variable
+
+d = tibble(x, b, y, y_bin, g = factor(g))
+```
+
+
+```{r}
+library(lme4)
+
+system.time({
+  mixed_big = lmer(y ~ x + b + (1|g))
+})
+
+system.time({
+  mixed_big = lme(y ~ x + b, random = ~1|g)
+})
+```
+
+```{r}
+system.time({
+  # m <- gamm4(CD44_stroma ~ ClusterName,random = ~1|spots, correlation = corExp(form = ~X + Y|spots), data = df)
+  m = gam(
+  CD44_stroma ~ ClusterName + s(spots, bs = 're'),
+  data = df,
+  method = 'REML'
+)
+
+})
+
+```
+
