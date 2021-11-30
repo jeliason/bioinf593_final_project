@@ -197,6 +197,7 @@ class CGModel():
         #TODO: Load model cpt and params from model path
         pass
 
+# cgm_reps is a list of CellGraphModels (not CGModels)
 def get_model_score_dict(cgm_reps, data, labs):
     graph_frames = []
     for e in data:
