@@ -17,18 +17,48 @@ library(gamm4)
 
 
 ```{r}
-df = read_csv("data/CRC_master.csv")
-colnames(df)
+# df = read_csv("data/CRC_master.csv")
+df = read_csv("data/spots_nbhds_df.csv")
+# df = df %>%
+#   mutate(across(c(groups,spots,patients,ClusterName),factor)) %>%
+#   select(-`...1`) %>%
+#   rename_all(~str_replace_all(., " - ", "_")) %>%
+#   rename_all(~str_replace_all(., " ", "_"))
+
 df = df %>%
-  mutate(across(c(groups,spots,patients,ClusterName),factor)) %>%
-  select(-`...1`) %>%
-  rename_all(~str_replace_all(., " - ", "_")) %>%
-  rename_all(~str_replace_all(., " ", "_"))
+  mutate(across(c(patient_group,patient_id,spot_id),factor)) %>%
+  rename_all(~str_replace_all(., " ", "_")) %>%
+  rename_all(~str_replace_all(., "\\+", "p")) %>%
+  rename_all(~str_replace_all(., "\\/",  ""))
+
+df = df[-c(1564,2171),] # these are outliers for binomial glm
+cols = colnames(df)
+data_cols = cols[6:length(cols)]
+df = df %>%
+  mutate(across(all_of(data_cols),scale))
+
+df
+
+# f = paste(cols[6:10], collapse=' + ') # only using a subset
+f = paste0('patient_group ~ ',f)
+# f.re = paste0(f,' + (1 | patient_id ) + (1 | patient_id : spot_id)')
+f.re = paste0(f,' + (1 + tumor_cells + vasculature + stroma | patient_id )')
+f.re = 'patient_group ~ (1 | spot_id ) + (1 | spot_id : patient_id)'
+
+m <- glmer(f.re, data=df,family = binomial)
+m.glm = glm(f,data = df, family = binomial)
+
+summary(m)
+
+summary(m.glm)
+
+pred = predict(m.glm, df, type="response")
 
 # m <- lme(CD44_stroma ~ ClusterName,random = ~1|spots, correlation = corExp(form = ~X + Y|spots), data = df)
 # 
 # m2 <- gls(CD44_stroma ~ ClusterName, data = df, verbose = T)
 # vario2 <- Variogram(m2, form = ~X + Y, resType = "pearson")
+
 ```
 
 ```{r}
@@ -76,7 +106,6 @@ system.time({
   data = df,
   method = 'REML'
 )
-
 })
 
 ```
