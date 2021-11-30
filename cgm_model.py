@@ -207,19 +207,21 @@ def get_model_score_dict(cgm_reps, data, labs):
         l = [labs[int(i)] for i in l]
         cell_id = graph.ndata['cell_ids']
         spot_id = graph.ndata['spot_id']
-        d = pd.DataFrame({'cell_type': l, 'X':pos[:,0],'Y':pos[:,1],'cell_id':cell_id,'graph_id':graph_id})
+        d = pd.DataFrame({'cell_type': l, 'X':pos[:,0],'Y':pos[:,1],'cell_id':cell_id,'spot_id':spot_id})
         d.attrs['group'] = target+1
         num_models = len(cgm_reps)
-        for i,cgm_model in enumerate(cgm_reps):
-            grad_campp_explainer = GraphGradCAMPPExplainer(model=cgm_model.cgm,gnn_layer_ids=['0','1'],gnn_layer_name='cell_graph_gnn')
+        for i,cgm in enumerate(cgm_reps):
+            grad_campp_explainer = GraphGradCAMPPExplainer(model=cgm,gnn_layer_ids=['0','1'],gnn_layer_name='cell_graph_gnn')
             score = grad_campp_explainer.process(graph)[0]
             d[f'campp_{i}'] = score
             with torch.no_grad():
                 c = copy.deepcopy(graph)
-                logits = cgm_model.cgm(c)
+                logits = cgm(c)
                 pred = torch.argmax(logits)
             d.attrs[f'pred_{i}'] = pred+1
         d['campp_median'] = d.loc[:,'campp_0':f'campp_{num_models-1}'].median(axis=1)
         d['campp_mad'] = d.loc[:,'campp_0':f'campp_{num_models-1}'].mad(axis=1)
         graph_frames.append(d)
     return graph_frames
+
+
