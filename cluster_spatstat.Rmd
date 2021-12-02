@@ -39,7 +39,7 @@ df = df %>%
 
 df
 
-# f = paste(cols[6:10], collapse=' + ') # only using a subset
+f = paste(cols[6:length(cols)], collapse=' + ') # only using a subset
 f = paste0('patient_group ~ ',f)
 # f.re = paste0(f,' + (1 | patient_id ) + (1 | patient_id : spot_id)')
 f.re = paste0(f,' + (1 + tumor_cells + vasculature + stroma | patient_id )')

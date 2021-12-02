@@ -1,0 +1,96 @@
+---
+title: "Importance Scores Group Prediction"
+author: "Joel Eliason"
+date: "12/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+```
+
+```{r}
+df = read_csv('data/importance_scores_group_prediction.csv') %>%
+  select(-`...1`) %>%
+  mutate(across(c(patient_group,patient_id,spot_id,cell_type),factor))
+```
+
+```{r}
+f.vals.spots = df %>%
+  group_by(spot_id) %>%
+  group_map(~{
+    summary(aov(.x$campp_median ~ .x$cell_type))[[1]][["Pr(>F)"]][[1]]
+    })
+
+f.vals.patients = df %>%
+  group_by(patient_id) %>%
+  group_map(~{
+    summary(aov(.x$campp_median ~ .x$cell_type))[[1]][["Pr(>F)"]][[1]]
+    })
+
+f.vals.groups = df %>%
+  group_by(patient_group) %>%
+  group_map(~{
+    summary(aov(.x$campp_median ~ .x$cell_type))[[1]][["Pr(>F)"]][[1]]
+    })
+
+get.diff.pairs = function(x) {
+  t = pairwise.wilcox.test(x$campp_median,x$cell_type,exact=F)$p.value
+  types = which(t < 0.05,arr.ind = T, useNames = F)
+  cols = colnames(t)
+  rows = rownames(t)
+  pairs = cbind(rows[types[,1]],cols[types[,2]])
+  pairs
+}
+
+
+pairwise.spots = df %>%
+  group_by(spot_id) %>%
+  group_map(~get.diff.pairs(.x))
+
+pairwise.patients = df %>%
+  group_by(patient_id) %>%
+  group_map(~get.diff.pairs(.x))
+
+pairwise.groups = df %>%
+  group_by(patient_group) %>%
+  group_map(~get.diff.pairs(.x))
+
+df %>%
+  filter(spot_id == 32) %>%
+  # distinct(cell_type) %>% pull
+  filter(cell_type == 'tumor cells') %>%
+  select(campp_median) %>%
+  colMeans
+
+df %>%
+  filter(spot_id == 32) %>%
+  # distinct(cell_type) %>% pull
+  filter(cell_type != 'tumor cells') %>%
+  select(campp_median) %>%
+  colMeans
+
+pairwise.spots[[33]]
+
+pairwise.spots[which(f.vals.spots > 0.05)]
+dim(pairwise.spots[[1]])[0]
+
+which(sapply(pairwise.spots, function(spot) {
+  dim(spot)[1] == 0
+}))
+
+which(f.vals.spots > 0.05) # this is a subset of the pairwise indices above
+
+# wilcox.test(campp_median ~ cell_type | spot_id / patient_id / patient_group, data = df,exact = F) # this is incorrect
+
+mean_campp_spots = df %>%
+  group_by(patient_group,patient_id,spot_id,cell_type) %>%
+  summarise(mean_campp = mean(campp_median))
+  
+mean_campp_spots
+
+m = glmer(mean_campp ~ cell_type + (1 | patient_group/patient_id/spot_id), data = mean_campp_spots, family = binomial)
+```
+
