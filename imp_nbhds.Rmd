@@ -7,7 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(spatstat)
 library(tidyverse)
 library(lme4)
 library(nlme)
@@ -34,8 +33,8 @@ df = df %>%
 df = df[-c(1564,2171),] # these are outliers for binomial glm
 cols = colnames(df)
 data_cols = cols[6:length(cols)]
-df = df %>%
-  mutate(across(all_of(data_cols),scale))
+# df = df %>%
+  # mutate(across(all_of(data_cols),scale))
 
 df
 
@@ -58,6 +57,27 @@ pred = predict(m.glm, df, type="response")
 # 
 # m2 <- gls(CD44_stroma ~ ClusterName, data = df, verbose = T)
 # vario2 <- Variogram(m2, form = ~X + Y, resType = "pearson")
+
+library(corrplot)
+cor_sel = function(X,threshold=0.2,breadth=1) {
+  correlation_matrix = cor(X)
+  threshold <- 0.2
+  breadth <- 1
+  correlation_matrix_filter <- correlation_matrix
+  diag(correlation_matrix_filter) <- 0
+  filter <- apply(correlation_matrix_filter,1, function(x) sum(abs(x) >= threshold,na.rm = T))
+  sel <- filter >= breadth
+  correlation_matrix_final <- correlation_matrix[sel,sel]
+  correlation_matrix_final
+}
+```
+
+```{r}
+corrplot(cor_sel(df %>% filter(patient_group == 1) %>% select(-c(patient_group,patient_id,spot_id,centroid_X,centroid_Y))),diag = F)
+
+corrplot(cor_sel(df %>% filter(patient_group == 2) %>% select(-c(patient_group,patient_id,spot_id,centroid_X,centroid_Y))),diag = F)
+
+corrplot(cor_sel(df %>% filter(patient_id == 1) %>% select(-c(patient_group,patient_id,spot_id,centroid_X,centroid_Y))),diag = F,type = 'lower', order = "AOE")
 
 ```
 
