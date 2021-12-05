@@ -1,0 +1,141 @@
+---
+title: "Importance Scores Group Prediction"
+author: "Joel Eliason"
+date: "12/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+```
+
+```{r}
+df = read_csv('data/importance_scores_group_prediction.csv') %>%
+  select(-`...1`) %>%
+  mutate(across(c(patient_group,patient_id,spot_id,cell_type),factor))
+```
+
+```{r}
+f.vals.spots = df %>%
+  group_by(spot_id) %>%
+  group_map(~{
+    summary(aov(.x$campp_median ~ .x$cell_type))[[1]][["Pr(>F)"]][[1]]
+    })
+
+f.vals.patients = df %>%
+  group_by(patient_id) %>%
+  group_map(~{
+    summary(aov(.x$campp_median ~ .x$cell_type))[[1]][["Pr(>F)"]][[1]]
+    })
+
+f.vals.groups = df %>%
+  group_by(patient_group) %>%
+  group_map(~{
+    summary(aov(.x$campp_median ~ .x$cell_type))[[1]][["Pr(>F)"]][[1]]
+    })
+
+get.diff.pairs = function(x) {
+  t = pairwise.wilcox.test(x$campp_median,x$cell_type,exact=F)$p.value
+  types = which(t < 0.05,arr.ind = T, useNames = F)
+  cols = colnames(t)
+  rows = rownames(t)
+  pairs = cbind(rows[types[,1]],cols[types[,2]])
+  pairs
+}
+
+
+pairwise.spots = df %>%
+  group_by(spot_id) %>%
+  group_map(~get.diff.pairs(.x))
+
+pairwise.patients = df %>%
+  group_by(patient_id) %>%
+  group_map(~get.diff.pairs(.x))
+
+pairwise.groups = df %>%
+  group_by(patient_group) %>%
+  group_map(~get.diff.pairs(.x))
+
+df %>%
+  filter(spot_id == 32) %>%
+  # distinct(cell_type) %>% pull
+  filter(cell_type == 'tumor cells') %>%
+  select(campp_median) %>%
+  colMeans
+
+df %>%
+  filter(spot_id == 32) %>%
+  # distinct(cell_type) %>% pull
+  filter(cell_type != 'tumor cells') %>%
+  select(campp_median) %>%
+  colMeans
+
+pairwise.spots[[33]]
+
+pairwise.spots[which(f.vals.spots > 0.05)]
+dim(pairwise.spots[[1]])[0]
+
+which(sapply(pairwise.spots, function(spot) {
+  dim(spot)[1] == 0
+}))
+
+which(f.vals.spots > 0.05) # this is a subset of the pairwise indices above
+
+# wilcox.test(campp_median ~ cell_type | spot_id / patient_id / patient_group, data = df,exact = F) # this is incorrect
+
+mean_campp_spots = df %>%
+  group_by(patient_group,patient_id,spot_id,cell_type) %>%
+  summarise(mean_campp = mean(campp_median))
+  # filter(cell_type %in% c('stroma','tumor cells','Tregs','vasculature','immune cells','granulocytes','CD8+ T Cells',
+  #                         'CD4+ T cells','B cells','CD4+ T cells CD45RO+','CD11c+ DCs'))
+  
+mean_campp_spots
+
+m = lmer(mean_campp ~ 0 + cell_type + (1 | patient_group/patient_id/spot_id), data = mean_campp_spots,REML = F)
+
+summary(m)
+
+m.a = lmer(mean_campp ~ cell_type + (1 | patient_group/patient_id), data = mean_campp_spots,REML = F)
+m.b = lmer(mean_campp ~ cell_type + (1 | patient_group), data = mean_campp_spots,REML = T)
+
+anova(m,m.a,m.b)
+
+# model is unable to be fit with more than a random intercept
+# let's just use the pairwise tests within spots after fitting a random intercept
+# can also try brms as well
+library(emmeans)
+
+m.emmeans = emmeans(m,pairwise~cell_type)
+
+m.emmeans
+
+library(sjPlot)
+
+library(sjlabelled)
+library(sjmisc)
+plot_model(m, type = "std", sort.est = T)
+
+sjp.lmer(m)
+tab_model(m)
+
+coef(m)
+
+predict(m,type = "response")
+
+plot_model(m,type = "pred", terms = "patient_id")
+
+
+```
+
+Thus we can see that the model accounting for patient group, id and spot id is the best fit. Furthermore, the coefficients yield the average mean for each cell type, pooled and shrunk across all of these subgroups. Then we can do a pairwise t test to find out which coefficients are the same (and thus see)
+
+
+### Brms
+
+```{r}
+# m.brm = brm(mean_campp ~ cell_type + (1 | patient_group/patient_id/spot_id), data = mean_campp_spots)
+```
+
