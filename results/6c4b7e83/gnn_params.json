@@ -1,0 +1,11 @@
+{
+    "readout_op": "concat",
+    "layer_type": "gin_layer",
+    "hidden_dim": 128,
+    "agg_type": "min",
+    "output_dim": 16,
+    "num_layers": 3,
+    "readout_type": "mean",
+    "batch_norm": false,
+    "act": "relu"
+}

@@ -1,0 +1,8 @@
+{
+    "k": 10,
+    "thresh": 10,
+    "mode": "connectivity",
+    "normalize": true,
+    "label_col": "cp_TNM_Simple",
+    "negative_val": 3.0
+}

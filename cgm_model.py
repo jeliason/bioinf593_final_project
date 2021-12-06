@@ -30,7 +30,7 @@ def safe_create(dir):
         return
     os.makedirs(dir)
 
-def data_to_dgl_graph(pt_data, cell_data, k=5, thresh=50, mode="distance", normalize=False):
+def data_to_dgl_graph(pt_data, cell_data, k=5, thresh=50, mode="distance", normalize=False, label_col="Group", negative_val=1):
     labs, ids = np.unique(cell_data.loc[:,'ClusterName'].to_numpy(), return_inverse=True)
     cell_data['ClusterID'] = ids
     graphs = []
@@ -51,8 +51,8 @@ def data_to_dgl_graph(pt_data, cell_data, k=5, thresh=50, mode="distance", norma
         graph.ndata[FEATURES] = torch.FloatTensor(features)
         if annotation is not None:
             graph.ndata[LABEL] = torch.FloatTensor(annotation.astype(float))
-        graph.ndata['cell_ids'] = cell_ids
-        graph.ndata['spot_id'] = np.array([spot_id for _ in range(num_nodes)])
+        graph.ndata['cell_ids'] = torch.Tensor(cell_ids)
+        graph.ndata['spot_id'] = torch.Tensor(np.array([spot_id for _ in range(num_nodes)]))
         adj = kneighbors_graph(
             centroids,
             k,
@@ -67,9 +67,9 @@ def data_to_dgl_graph(pt_data, cell_data, k=5, thresh=50, mode="distance", norma
         assert(len(subset['patients'].unique()) == 1)
         patients.append(subset['patients'].unique()[0])
     for pt in patients:
-        cp = pt_data.loc[pt_data.loc[:,'Patient'] == pt,'Group'].values[0]
-        assert(cp == 1 or cp == 2)
-        t = 0 if cp == 1 else 1
+        cp = pt_data.loc[pt_data.loc[:,'Patient'] == pt,label_col].values[0]
+        #assert(cp == 1 or cp == 2)
+        t = 0 if cp == negative_val else 1
         targets.append(t)
     return list(zip(graphs,targets)), labs, ids
 
@@ -113,7 +113,7 @@ class CGModel():
 
         self.cgm.to(self.device)
 
-    def train(self, data, val_prop=0, oversample_factor=1, lr=10e-4, weight_decay=5e-4, num_epochs=50, batch_size=8):
+    def train(self, data, val_prop=0, oversample_factor=1, lr=10e-4, weight_decay=5e-4, num_epochs=50, batch_size=8, output_dir=None):
         optimizer = torch.optim.Adam(
             self.cgm.parameters(),
             lr=lr,
@@ -129,11 +129,13 @@ class CGModel():
         loss_list = []
         val_accuracy_list = []
         train_data, val_data = dataset_split(data, val_prop)
+        print("Train positive prop: {}".format(sum([i[1] for i in train_data])/len(train_data)))
+        print("Val positive prop: {}".format(sum([i[1] for i in val_data])/len(val_data)))
         train_data = oversample_positive(train_data, oversample_factor=oversample_factor)
         train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, collate_fn=collate)
         val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=True, collate_fn=collate)
         with trange(num_epochs) as t:
-            for _ in t:
+            for i in t:
                 t.set_description('Loss={} | Val Accuracy={}'.format(loss, val_accuracy))
                 self.cgm.train()
                 for graphs, labels in train_dataloader:
@@ -162,7 +164,9 @@ class CGModel():
                     correct = torch.sum(predictions.to(int) == all_val_labels.to(int))
                     val_accuracy = round(correct.item() * 1.0 / len(all_val_labels), 2)
                     val_accuracy_list.append(val_accuracy)
-        return loss_list, val_accuracy_list
+                if output_dir is not None:
+                    self.save("{}/model-{}.pkl".format(output_dir, i))
+        return loss_list, val_accuracy_list, train_data, val_data
     
     def infer(self, graphs, batch_size=8):
         val_dataloader = DataLoader(graphs, batch_size=batch_size, collate_fn=collate_graph)
@@ -235,37 +239,39 @@ def get_model_score_dict(cgm_reps, data, labs):
     return graph_frames
 
 DATA_PREPROC_SEARCH_SPACE = {
-    "k": [2, 5, 10, 20],
-    "thresh": [10, 25, 50],
-    "mode": ["distance", "connectivity"],
-    "normalize": [True, False]
+    "k": [10],
+    "thresh": [10],
+    "mode": ["connectivity", "distance"],
+    "normalize": [True],
+    "label_col": ["Group"],
+    "negative_val": [1]
 }
 
 
 GNN_PARAMS_SEARCH_SPACE = {
-    'readout_op': ['none', 'concat', 'lstm'],
-    'layer_type': ['gin_layer', 'pna_layer'],
-    'hidden_dim': [16,32,64,128],
-    'agg_type': ['mean', 'min', 'max'],
-    'output_dim': [16, 32, 64, 128],
+    'readout_op': ['lstm'],
+    'layer_type': ['gin_layer'],
+    'hidden_dim': [64,128],
+    'agg_type': ['mean'],
+    'output_dim': [16, 32, 64],
     'num_layers': [1,2,3],
-    'readout_type': ['sum','mean','min','max'],
-    'batch_norm': [True,False],
+    'readout_type': ['mean'],
+    'batch_norm': [True],
     'act': ['relu']
 }
 
 CLASSIFICATION_PARAM_SEARCH_SPACE = {
     'hidden_dim': [16,32,64,128],
-    'num_layers': [1,2,3]
+    'num_layers': [1,2]
 }
 
 TRAIN_PARAM_SEARCH_SPACE = {
     "val_prop": [0.7],
     "oversample_factor": [1],
     "lr": [10e-3, 10e-4],
-    "weight_decay": [5e-5, 5e-4, 5e-3],
+    "weight_decay": [5e-3],
     "num_epochs": [50],
-    "batch_size": [4, 8, 16]
+    "batch_size": [4, 8]
 }
 
 class Experiment:
@@ -277,43 +283,53 @@ class Experiment:
         self.pt_data = pd.read_excel(pt_data_path)
         self.cell_data = pd.read_csv(cell_data_path)
         self.id = str(uuid.uuid4())[:8]
-    
+        self.base_path = "{}/{}".format(self.output_dir, self.id)
     def run_experiment(self, data_preproc_params, gnn_params, classification_params, train_params):
-        data, labs, ids = data_to_dgl_graph(self.pt_data, self.cell_data, k=data_preproc_params['k'], thresh=data_preproc_params['thresh'], mode=data_preproc_params['mode'], normalize=data_preproc_params['normalize'])
+        data, labs, ids = data_to_dgl_graph(self.pt_data, self.cell_data, k=data_preproc_params['k'], thresh=data_preproc_params['thresh'], mode=data_preproc_params['mode'], normalize=data_preproc_params['normalize'], label_col=data_preproc_params['label_col'], negative_val=data_preproc_params['negative_val'])
         self.data_preproc_params = data_preproc_params
         self.gnn_params = gnn_params
         self.classification_params = classification_params
         self.train_params = train_params
         self.model = CGModel(gnn_params=gnn_params, classification_params=classification_params)
-        self.loss_list, self.val_accuracy_list = self.model.train(data, val_prop=train_params['val_prop'], oversample_factor=train_params['oversample_factor'], lr=train_params['lr'], weight_decay=train_params['weight_decay'], num_epochs=train_params['num_epochs'], batch_size=train_params['batch_size'])
+        self.loss_list, self.val_accuracy_list, self.train_data, self.val_data = self.model.train(data, val_prop=train_params['val_prop'], oversample_factor=train_params['oversample_factor'], lr=train_params['lr'], weight_decay=train_params['weight_decay'], num_epochs=train_params['num_epochs'], batch_size=train_params['batch_size'], output_dir=self.base_path)
 
     def save_results(self):
-        base_path = "{}/{}".format(self.output_dir, self.id)
-        safe_create(base_path)
-        with open("{}/data_preproc_params.json".format(base_path), 'w') as f:
+        safe_create(self.base_path)
+        with open("{}/data_preproc_params.json".format(self.base_path), 'w') as f:
             json.dump(self.data_preproc_params, f, indent=4)
 
-        with open("{}/gnn_params.json".format(base_path), 'w') as f:
+        with open("{}/gnn_params.json".format(self.base_path), 'w') as f:
             json.dump(self.gnn_params, f, indent=4)
         
-        with open("{}/classification_params.json".format(base_path), 'w') as f:
+        with open("{}/classification_params.json".format(self.base_path), 'w') as f:
             json.dump(self.classification_params, f, indent=4)
         
-        with open("{}/train_params.json".format(base_path), 'w') as f:
+        with open("{}/train_params.json".format(self.base_path), 'w') as f:
             json.dump(self.train_params, f, indent=4)
         
-        with open("{}/loss_list.json".format(base_path), 'w') as f:
+        with open("{}/loss_list.json".format(self.base_path), 'w') as f:
             json.dump(self.loss_list, f, indent=4)
         
-        with open("{}/val_accuracy_list.json".format(base_path), 'w') as f:
+        with open("{}/val_accuracy_list.json".format(self.base_path), 'w') as f:
             json.dump(self.val_accuracy_list, f, indent=4)
-        self.model.save("{}/model.pkl".format(base_path))
+        
+        with open("{}/train_data.pkl".format(self.base_path), 'wb') as f:
+            pickle.dump(self.train_data, f)
+        
+        with open("{}/val_data.pkl".format(self.base_path), 'wb') as f:
+            pickle.dump(self.val_data, f)
+        
+        self.model.save("{}/model.pkl".format(self.base_path))
 
     def run(self):
         data_preproc_params = {k: random.choice(v) for k, v in DATA_PREPROC_SEARCH_SPACE.items()}
         gnn_params = {k: random.choice(v) for k, v in GNN_PARAMS_SEARCH_SPACE.items()}
         classification_params = {k: random.choice(v) for k, v in CLASSIFICATION_PARAM_SEARCH_SPACE.items()}
         train_params = {k: random.choice(v) for k, v in TRAIN_PARAM_SEARCH_SPACE.items()}
+        print(gnn_params)
+        print()
+        print()
+        print(classification_params)
         self.run_experiment(data_preproc_params, gnn_params, classification_params, train_params)
         self.save_results()
 

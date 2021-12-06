@@ -1,0 +1,11 @@
+{
+    "readout_op": "lstm",
+    "layer_type": "gin_layer",
+    "hidden_dim": 128,
+    "agg_type": "mean",
+    "output_dim": 32,
+    "num_layers": 1,
+    "readout_type": "mean",
+    "batch_norm": false,
+    "act": "relu"
+}

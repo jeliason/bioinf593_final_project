@@ -1,0 +1,6 @@
+{
+    "k": 5,
+    "thresh": 25,
+    "mode": "distance",
+    "normalize": false
+}

@@ -1,0 +1,6 @@
+{
+    "k": 10,
+    "thresh": 50,
+    "mode": "connectivity",
+    "normalize": true
+}

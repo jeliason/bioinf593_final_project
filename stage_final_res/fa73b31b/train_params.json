@@ -1,0 +1,8 @@
+{
+    "val_prop": 0.7,
+    "oversample_factor": 5,
+    "lr": 0.001,
+    "weight_decay": 0.005,
+    "num_epochs": 50,
+    "batch_size": 4
+}
